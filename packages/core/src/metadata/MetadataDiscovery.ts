@@ -2050,7 +2050,7 @@ export class MetadataDiscovery {
       return;
     }
 
-    if (Array.isArray(prop.default) && prop.customType) {
+    if (prop.customType && prop.customType.compareAsType() !== 'any') {
       val = prop.customType.convertToDatabaseValue(prop.default, this.#platform)!;
     }
 
