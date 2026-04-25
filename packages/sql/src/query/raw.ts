@@ -79,7 +79,10 @@ export function raw<R = RawQueryFragment & symbol, T extends object = any>(
 ): R {
   if (Utils.isObject<KyselySelectQueryBuilder<any, any, any>>(sql) && 'compile' in sql) {
     const query = sql.compile();
-    return raw_(query.sql, query.parameters);
+    // postgres-style placeholders ($N) need rewriting to MikroORM's internal `?` style;
+    // a no-op for other dialects whose kysely drivers already emit `?` (sqlite/mysql) or `@N` (mssql).
+    const processed = query.sql.replaceAll(/\$\d+/g, '?');
+    return raw_(processed, query.parameters);
   }
 
   if (Utils.isObject<QueryBuilderLike>(sql) && 'toQuery' in sql) {
