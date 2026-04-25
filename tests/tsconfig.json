@@ -7,6 +7,23 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "noImplicitOverride": false,
-    "sourceMap": true
+    "sourceMap": true,
+    /*
+     * `skipLibCheck` is intentionally NOT set here — the path-mapped stub
+     * (./pglite-stub.d.ts) sidesteps `@electric-sql/pglite`'s DOM/Emscripten
+     * d.ts. If a future test-only dep ships a broken d.ts, prefer adding a
+     * stub here over re-enabling skipLibCheck globally.
+     */
+    "paths": {
+      "@mikro-orm/*": ["../packages/*/src"],
+      "@mikro-orm/core/fs-utils": ["../packages/core/src/utils/fs-utils.ts"],
+      "@mikro-orm/core/migrations": ["../packages/core/src/utils/AbstractMigrator.ts"],
+      "@mikro-orm/core/schema": ["../packages/core/src/utils/AbstractSchemaGenerator.ts"],
+      "@mikro-orm/core/dataloader": ["../packages/core/src/utils/DataloaderUtils.ts"],
+      "@mikro-orm/decorators/es": ["../packages/decorators/src/es/index.ts"],
+      "@mikro-orm/decorators/legacy": ["../packages/decorators/src/legacy/index.ts"],
+      "@mikro-orm/core/file-discovery": ["../packages/core/src/metadata/discover-entities.ts"],
+      "@electric-sql/pglite": ["./pglite-stub.d.ts"]
+    }
   }
 }
