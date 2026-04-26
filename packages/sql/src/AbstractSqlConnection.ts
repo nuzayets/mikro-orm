@@ -243,6 +243,20 @@ export abstract class AbstractSqlConnection extends Connection {
     await eventBroadcaster?.dispatchEvent(EventType.afterTransactionRollback, ctx);
   }
 
+  /**
+   * Pulls cancellation controls out of a `loggerContext` payload. The QueryBuilder/EM stash
+   * `signal`/`inflightQueryAbortStrategy` there to avoid widening the public connection API.
+   *
+   * @internal
+   */
+  static extractAbortOptions(loggerContext?: LoggingOptions): AbortQueryOptions | undefined {
+    const ctx = loggerContext as (LoggingOptions & Partial<AbortQueryOptions>) | undefined;
+    if (ctx?.signal == null && ctx?.inflightQueryAbortStrategy == null) {
+      return undefined;
+    }
+    return { signal: ctx.signal, inflightQueryAbortStrategy: ctx.inflightQueryAbortStrategy };
+  }
+
   private prepareQuery(
     query: string | NativeQueryBuilder | RawQueryFragment,
     params: readonly unknown[] = [],
@@ -269,11 +283,11 @@ export abstract class AbstractSqlConnection extends Connection {
     method: 'all' | 'get' | 'run' = 'all',
     ctx?: Transaction,
     loggerContext?: LoggingOptions,
-    abortOptions?: AbortQueryOptions,
   ): Promise<T> {
     await this.ensureConnection();
     const q = this.prepareQuery(query, params);
     const sql = this.getSql(q.query, q.formatted, loggerContext);
+    const abortOptions = AbstractSqlConnection.extractAbortOptions(loggerContext);
 
     return this.executeQuery<T>(
       sql,
@@ -293,11 +307,11 @@ export abstract class AbstractSqlConnection extends Connection {
     ctx?: Transaction<Kysely<any>>,
     loggerContext?: LoggingOptions,
     chunkSize?: number,
-    abortOptions?: AbortQueryOptions,
   ): AsyncIterableIterator<T> {
     await this.ensureConnection();
     const q = this.prepareQuery(query, params);
     const sql = this.getSql(q.query, q.formatted, loggerContext);
+    const abortOptions = AbstractSqlConnection.extractAbortOptions(loggerContext);
 
     // construct the compiled query manually with `kind: 'SelectQueryNode'` to avoid sqlite validation for select queries when streaming
     const compiled = {

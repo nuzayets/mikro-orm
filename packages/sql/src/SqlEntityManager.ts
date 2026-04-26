@@ -1,5 +1,4 @@
 import {
-  type AbortQueryOptions,
   type EntitySchemaWithMeta,
   EntityManager,
   raw,
@@ -46,7 +45,7 @@ export class SqlEntityManager<Driver extends AbstractSqlDriver = AbstractSqlDriv
     loggerContext?: LoggingOptions,
   ): QueryBuilder<Entity, RootAlias> {
     const context = this.getContext(false);
-    return this.driver.createQueryBuilder(
+    const qb = this.driver.createQueryBuilder(
       entityName as EntityName<Entity>,
       context.getTransactionContext(),
       type,
@@ -54,8 +53,9 @@ export class SqlEntityManager<Driver extends AbstractSqlDriver = AbstractSqlDriv
       loggerContext ?? context.loggerContext,
       alias,
       this,
-      context.getAbortOptions(),
-    ) as any;
+    );
+    qb.setAbortOptions(context.getAbortOptions());
+    return qb as any;
   }
 
   /**
@@ -99,17 +99,11 @@ export class SqlEntityManager<Driver extends AbstractSqlDriver = AbstractSqlDriv
     params: any[] = [],
     method: 'all' | 'get' | 'run' = 'all',
     loggerContext?: LoggingOptions,
-    abortOptions?: AbortQueryOptions,
   ): Promise<T> {
     const context = this.getContext(false);
-    return this.getDriver().execute(
-      query,
-      params,
-      method,
-      context.getTransactionContext(),
-      loggerContext,
-      abortOptions ?? context.getAbortOptions(),
-    );
+    const abort = context.getAbortOptions();
+    const merged = abort ? ({ ...(loggerContext as Dictionary), ...abort } as LoggingOptions) : loggerContext;
+    return this.getDriver().execute(query, params, method, context.getTransactionContext(), merged);
   }
 
   /**
