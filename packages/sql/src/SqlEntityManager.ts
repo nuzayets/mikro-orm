@@ -1,4 +1,5 @@
 import {
+  type AbortQueryOptions,
   type EntitySchemaWithMeta,
   EntityManager,
   raw,
@@ -93,16 +94,28 @@ export class SqlEntityManager<Driver extends AbstractSqlDriver = AbstractSqlDriv
     return kysely;
   }
 
-  /** Executes a raw SQL query, using the current transaction context if available. */
+  /**
+   * Executes a raw SQL query, using the current transaction context if available.
+   *
+   * The `loggerContext` parameter accepts the standard logging options and may also carry
+   * `signal`/`inflightQueryAbortStrategy` for per-call cancellation. When omitted, the
+   * fork-level signal (set via `em.fork({ signal })`) is used instead.
+   */
   async execute<T extends QueryResult | EntityData<AnyEntity> | EntityData<AnyEntity>[] = EntityData<AnyEntity>[]>(
     query: string | NativeQueryBuilder | RawQueryFragment,
     params: any[] = [],
     method: 'all' | 'get' | 'run' = 'all',
-    loggerContext?: LoggingOptions,
+    loggerContext?: LoggingOptions & Partial<AbortQueryOptions>,
   ): Promise<T> {
     const context = this.getContext(false);
-    const abort = context.getAbortOptions();
-    const merged = abort ? ({ ...(loggerContext as Dictionary), ...abort } as LoggingOptions) : loggerContext;
+    // Per-field fallback to fork-level abort, matching `EntityManager.prepareOptions` semantics.
+    const fork = context.getAbortOptions();
+    const merged: (LoggingOptions & Partial<AbortQueryOptions>) | undefined =
+      fork || loggerContext ? { ...(loggerContext as Dictionary) } : undefined;
+    if (merged) {
+      merged.signal ??= fork?.signal;
+      merged.inflightQueryAbortStrategy ??= fork?.inflightQueryAbortStrategy;
+    }
     return this.getDriver().execute(query, params, method, context.getTransactionContext(), merged);
   }
 

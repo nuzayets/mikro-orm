@@ -1346,7 +1346,7 @@ export class UnitOfWork {
       await this.runHooks(EventType.beforeCreate, changeSet, true);
     }
 
-    await this.#changeSetPersister.executeInserts(changeSets, { ctx });
+    await this.#changeSetPersister.executeInserts(changeSets, { ctx, ...this.#em.getAbortOptions() });
 
     for (const changeSet of changeSets) {
       // For TPT entities, use the full entity snapshot instead of the partial changeset payload,
@@ -1440,7 +1440,7 @@ export class UnitOfWork {
       await this.runHooks(EventType.beforeUpdate, changeSet, true);
     }
 
-    await this.#changeSetPersister.executeUpdates(changeSets, batched, { ctx });
+    await this.#changeSetPersister.executeUpdates(changeSets, batched, { ctx, ...this.#em.getAbortOptions() });
 
     for (const changeSet of changeSets) {
       const wrapped = helper(changeSet.entity);
@@ -1477,7 +1477,7 @@ export class UnitOfWork {
       await this.runHooks(EventType.beforeDelete, changeSet, true);
     }
 
-    await this.#changeSetPersister.executeDeletes(changeSets, { ctx });
+    await this.#changeSetPersister.executeDeletes(changeSets, { ctx, ...this.#em.getAbortOptions() });
 
     for (const changeSet of changeSets) {
       this.unsetIdentity(changeSet.entity);
@@ -1533,6 +1533,7 @@ export class UnitOfWork {
       ctx,
       schema: this.#em.schema,
       loggerContext,
+      ...this.#em.getAbortOptions(),
     });
 
     for (const coll of this.#collectionUpdates) {

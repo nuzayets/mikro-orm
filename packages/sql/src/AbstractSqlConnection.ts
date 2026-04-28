@@ -244,17 +244,26 @@ export abstract class AbstractSqlConnection extends Connection {
   }
 
   /**
-   * Pulls cancellation controls out of a `loggerContext` payload. The QueryBuilder/EM stash
-   * `signal`/`inflightQueryAbortStrategy` there to avoid widening the public connection API.
+   * Pulls cancellation controls out of a `loggerContext` payload, returning the abort options
+   * and a sanitized context that no longer carries them. The QueryBuilder/EM stash
+   * `signal`/`inflightQueryAbortStrategy` on `loggerContext` to avoid widening the public
+   * connection API; stripping them prevents leakage into user `Logger.logQuery` payloads.
    *
    * @internal
    */
-  static extractAbortOptions(loggerContext?: LoggingOptions): AbortQueryOptions | undefined {
+  static extractAbortOptions(loggerContext?: LoggingOptions): {
+    abort?: AbortQueryOptions;
+    loggerContext?: LoggingOptions;
+  } {
     const ctx = loggerContext as (LoggingOptions & Partial<AbortQueryOptions>) | undefined;
     if (ctx?.signal == null && ctx?.inflightQueryAbortStrategy == null) {
-      return undefined;
+      return { loggerContext };
     }
-    return { signal: ctx.signal, inflightQueryAbortStrategy: ctx.inflightQueryAbortStrategy };
+    const { signal, inflightQueryAbortStrategy, ...rest } = ctx;
+    return {
+      abort: { signal, inflightQueryAbortStrategy },
+      loggerContext: rest as LoggingOptions,
+    };
   }
 
   private prepareQuery(
@@ -287,16 +296,16 @@ export abstract class AbstractSqlConnection extends Connection {
     await this.ensureConnection();
     const q = this.prepareQuery(query, params);
     const sql = this.getSql(q.query, q.formatted, loggerContext);
-    const abortOptions = AbstractSqlConnection.extractAbortOptions(loggerContext);
+    const { abort, loggerContext: cleanCtx } = AbstractSqlConnection.extractAbortOptions(loggerContext);
 
     return this.executeQuery<T>(
       sql,
       async () => {
         const compiled = CompiledQuery.raw(q.formatted);
-        const res = await (ctx ?? this.#client).executeQuery(compiled, abortOptions);
+        const res = await (ctx ?? this.#client).executeQuery(compiled, abort);
         return this.transformRawResult<T>(res, method);
       },
-      { ...q, ...loggerContext },
+      { ...q, ...cleanCtx },
     );
   }
 
@@ -311,7 +320,7 @@ export abstract class AbstractSqlConnection extends Connection {
     await this.ensureConnection();
     const q = this.prepareQuery(query, params);
     const sql = this.getSql(q.query, q.formatted, loggerContext);
-    const abortOptions = AbstractSqlConnection.extractAbortOptions(loggerContext);
+    const { abort, loggerContext: cleanCtx } = AbstractSqlConnection.extractAbortOptions(loggerContext);
 
     // construct the compiled query manually with `kind: 'SelectQueryNode'` to avoid sqlite validation for select queries when streaming
     const compiled = {
@@ -325,12 +334,12 @@ export abstract class AbstractSqlConnection extends Connection {
     try {
       const res = (ctx ?? this.getClient())
         .getExecutor()
-        .stream(compiled, chunkSize ?? 100, abortOptions ? { signal: abortOptions.signal } : undefined);
+        .stream(compiled, chunkSize ?? 100, abort ? { signal: abort.signal } : undefined);
 
       this.logQuery(sql, {
         sql,
         params,
-        ...loggerContext,
+        ...cleanCtx,
         affected: Utils.isPlainObject<QueryResult>(res) ? res.affectedRows : undefined,
       });
 
@@ -340,7 +349,7 @@ export abstract class AbstractSqlConnection extends Connection {
         }
       }
     } catch (e) {
-      this.logQuery(sql, { sql, params, ...loggerContext, level: 'error' });
+      this.logQuery(sql, { sql, params, ...cleanCtx, level: 'error' });
       throw e;
     }
   }

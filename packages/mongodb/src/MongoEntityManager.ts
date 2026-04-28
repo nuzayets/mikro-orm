@@ -25,14 +25,24 @@ export class MongoEntityManager<Driver extends MongoDriver = MongoDriver> extend
    * Shortcut to driver's aggregate method. Available in MongoDriver only.
    */
   async aggregate(entityName: EntityName, pipeline: any[]): Promise<any[]> {
-    return this.getDriver().aggregate(entityName, pipeline, this.getTransactionContext());
+    return this.getDriver().aggregate(
+      entityName,
+      pipeline,
+      this.getTransactionContext(),
+      this.getAbortOptions()?.signal,
+    );
   }
 
   /**
    * Shortcut to driver's aggregate method. Returns a stream. Available in MongoDriver only.
    */
   async *streamAggregate<T extends object>(entityName: EntityName, pipeline: any[]): AsyncIterableIterator<T> {
-    yield* this.getDriver().streamAggregate<T>(entityName, pipeline, this.getTransactionContext());
+    yield* this.getDriver().streamAggregate<T>(
+      entityName,
+      pipeline,
+      this.getTransactionContext(),
+      this.getAbortOptions()?.signal,
+    );
   }
 
   /**
@@ -98,7 +108,9 @@ export class MongoEntityManager<Driver extends MongoDriver = MongoDriver> extend
 
     pipeline.push({ $group: { _id: groupId, count: { $sum: 1 } } });
 
-    const rows = await em.getDriver().aggregate(meta.class, pipeline, em.getTransactionContext());
+    const rows = await em
+      .getDriver()
+      .aggregate(meta.class, pipeline, em.getTransactionContext(), em.getAbortOptions()?.signal);
     const results: Dictionary<number> = {};
 
     for (const row of rows) {
