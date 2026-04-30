@@ -291,6 +291,36 @@ The generated file gives you two exports:
 
 Re-run the command whenever your entity set changes (or wire it into your build step). No decorator changes, no migration away from folder discovery — just typed Kysely queries across the stack.
 
+## Runtime schema context for migrations
+
+Two long-standing pain points around migrations and schemas are now addressed by a single new mechanism: a **runtime schema context** that redirects existing migrations to a target schema without regenerating them.
+
+```ts
+// per-deployment-one-schema (e.g. PR previews)
+await MikroORM.init({
+  migrations: { schema: process.env.PR_PREVIEW_SCHEMA },
+});
+
+// or fan a single migration set out to many tenant schemas
+for (const tenant of tenants) {
+  await orm.migrator.up({ schema: tenant });
+}
+```
+
+When a runtime schema is resolved, the migrator prepends the driver's "set current schema" statement before each migration and resets it in a `finally` block so the pooled connection isn't left pointing at the migration's target schema. The tracking table follows the same schema, so each target gets its own independent migration history (matches Flyway/Liquibase semantics).
+
+| Driver           | Set                                       | Reset                                            |
+|------------------|-------------------------------------------|--------------------------------------------------|
+| PostgreSQL       | ``SET search_path TO "x"``                | `RESET search_path`                              |
+| MySQL / MariaDB  | `` USE `x` ``                             | `` USE `<config.dbName>` ``                      |
+| Oracle           | ``ALTER SESSION SET CURRENT_SCHEMA = "x"``| ``ALTER SESSION SET CURRENT_SCHEMA = "<dbName>"``|
+| MSSQL            | unsupported — throws                      | —                                                |
+| SQLite / libSQL  | schemaless — silent no-op                 | —                                                |
+
+For the multi-tenant case, opt wildcard entities (`@Entity({ schema: '*' })`) into `migration:create` with `migrations.includeWildcardSchema: true` so the emitted DDL is unqualified and safe to apply against any schema. Tenant orchestration and failure recovery remain the caller's responsibility — this ships primitives, not a managed multi-tenant migrator.
+
+The CLI gets a matching `--schema` flag on `migration:up` / `migration:down`, and `migrator.getExecuted({ schema })` / `getPending({ schema })` let you inspect per-tenant state without mutating global config. Strictly additive — nothing changes unless you opt in.
+
 ## CLI: more migration commands
 
 Two other CLI additions on the migrations side:
